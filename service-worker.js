@@ -1,4 +1,4 @@
-const CACHE_NAME = 'household-ledger-v1';
+const CACHE_NAME = 'household-ledger-v2';
 const SHELL_FILES = [
   './',
   './index.html',
