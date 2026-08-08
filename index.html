@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>🐷 Household Ledger</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FF8FAE">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Firebase (compat SDK — plain <script> tags, no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+
+<style>
+  :root{
+    --ink-cover:#EAF6FF;
+    --ink-cover-2:#FFE9F2;
+    --paper:#FFFFFF;
+    --paper-2:#FFF1F6;
+    --line:#F6DCE6;
+    --line-soft:#FBEAF1;
+    --stamp:#FF8FAE;
+    --stamp-dark:#F2688F;
+    --jade:#7ED9A8;
+    --jade-dark:#3FA772;
+    --ink-text:#4A4458;
+    --ink-soft:#A79AB3;
+    --gold:#FFC15E;
+    --blue:#8FD3F4;
+    --blue-dark:#5EB8E6;
+    --radius:18px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:linear-gradient(160deg, var(--ink-cover) 0%, var(--ink-cover-2) 100%);
+    min-height:100vh;
+    font-family:'Nunito', sans-serif;
+    color:var(--ink-text);
+    display:flex;
+    justify-content:center;
+    padding:0;
+  }
+  .book{
+    width:100%;
+    max-width:480px;
+    min-height:100vh;
+    background:var(--paper);
+    position:relative;
+    box-shadow:0 10px 50px rgba(255,143,174,0.25);
+    overflow-x:hidden;
+    border-radius:0;
+  }
+  @media (min-width:520px){
+    body{ padding:24px 0; }
+    .book{ min-height:calc(100vh - 48px); border-radius:32px; }
+  }
+
+  .screen{ padding:22px 18px 60px; }
+  .hidden{ display:none !important; }
+
+  .field{ margin-bottom:18px; }
+  .field label{
+    display:block; font-size:12px; color:var(--ink-soft);
+    margin-bottom:6px; letter-spacing:0.04em;
+  }
+  input[type=text], input[type=number], input[type=date], input[type=email], input[type=password], select{
+    width:100%;
+    font-family:'Nunito', sans-serif;
+    font-weight:700;
+    font-size:15px;
+    padding:12px 14px;
+    border:2px solid var(--line);
+    border-radius:14px;
+    background:var(--paper-2);
+    color:var(--ink-text);
+  }
+  select{ background:var(--paper-2); }
+  input:focus, select:focus{ outline:none; border-color:var(--stamp); }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    font-family:'Baloo 2', sans-serif;
+    font-weight:700; font-size:15px;
+    padding:13px 20px;
+    border:none; border-radius:999px;
+    cursor:pointer;
+    min-height:48px;
+  }
+  .btn-stamp{
+    background:linear-gradient(180deg, var(--stamp) 0%, var(--stamp-dark) 100%); color:#fff;
+    width:100%;
+    box-shadow:0 4px 0 var(--stamp-dark), 0 6px 14px rgba(255,143,174,0.4);
+    position:relative;
+  }
+  .btn-stamp:disabled{ opacity:0.6; }
+  .btn-stamp:active{ transform:translateY(2px); box-shadow:0 2px 0 var(--stamp-dark); }
+  .btn-stamp.stamping{ animation:stampPress 0.35s ease; }
+  @keyframes stampPress{
+    0%{ transform:scale(1); }
+    35%{ transform:scale(0.92) rotate(-2deg); }
+    70%{ transform:scale(1.05) rotate(1deg); }
+    100%{ transform:scale(1); }
+  }
+  .btn-ghost{
+    background:transparent; color:var(--ink-soft);
+    border:2px solid var(--line);
+    font-weight:600;
+  }
+  .btn-link{
+    background:none; border:none; color:var(--blue-dark);
+    font-size:12px; font-weight:700; text-decoration:none; cursor:pointer; padding:4px 0;
+  }
+
+  h2.section-title{
+    font-family:'Baloo 2', sans-serif;
+    font-size:17px;
+    margin:0 0 14px;
+    padding-bottom:8px;
+    border-bottom:2px dashed var(--line);
+    display:flex; align-items:baseline; justify-content:space-between;
+    color:#7A6E8C;
+  }
+  h2.section-title .sub{
+    font-family:'Nunito', sans-serif;
+    font-size:11px; color:var(--ink-soft); font-weight:700;
+  }
+
+  .income-card{
+    background:linear-gradient(135deg, var(--paper-2) 0%, #EAF6FF 100%);
+    border:2px solid var(--line);
+    border-radius:20px;
+    padding:18px;
+    margin-bottom:26px;
+    position:relative;
+  }
+  .income-row{ display:flex; justify-content:space-between; align-items:center; }
+  .income-amt{ font-family:'Baloo 2', sans-serif; font-size:26px; font-weight:700; color:#F2688F; }
+  .income-freq{ font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.06em; margin-top:2px; font-weight:700;}
+
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+  .chip{
+    display:flex; align-items:center; gap:6px;
+    padding:9px 14px;
+    border:2px solid var(--line);
+    border-radius:999px;
+    font-size:13px;
+    font-weight:700;
+    cursor:pointer;
+    background:var(--paper-2);
+    user-select:none;
+  }
+  .chip.selected{ background:var(--stamp); border-color:var(--stamp-dark); color:#fff; }
+
+  .ledger-row{
+    display:flex; align-items:center; gap:10px;
+    padding:12px 10px;
+    margin-bottom:8px;
+    border-radius:16px;
+    background:var(--paper-2);
+    font-size:14px;
+  }
+  .ledger-row .cat-emoji{ font-size:19px; width:26px; text-align:center; }
+  .ledger-row .desc{ flex:1; min-width:0; }
+  .ledger-row .desc .cat{ font-weight:700; }
+  .ledger-row .desc .note{ font-size:11px; color:var(--ink-soft); font-weight:600; }
+  .ledger-row .amt{ font-family:'Baloo 2', sans-serif; font-weight:700; color:#F2688F; }
+  .ledger-row .del{ background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer; padding:2px 4px; line-height:1; }
+  .ledger-row .date-tag{ font-size:10px; color:var(--ink-soft); font-weight:700; }
+
+  .empty-note{ font-size:13px; color:var(--ink-soft); font-weight:600; padding:14px 0; }
+
+  .summary-box{ background:linear-gradient(135deg, #FFF1F6 0%, #EAF6FF 100%); border:2px solid var(--line); border-radius:20px; padding:18px 16px; margin-bottom:24px; }
+  .summary-line{ display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; font-family:'Baloo 2', sans-serif; font-size:14px; }
+  .summary-line.total{ border-top:2px dashed var(--line); margin-top:6px; padding-top:12px; font-size:19px; font-weight:700; }
+  .summary-line .lbl{ font-family:'Nunito', sans-serif; font-size:13px; color:var(--ink-soft); font-weight:700; }
+  .saved-positive{ color:var(--jade-dark); }
+  .saved-negative{ color:#E8607F; }
+
+  .bar-row{ margin-bottom:12px; }
+  .bar-row .bar-label{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; font-weight:700; }
+  .bar-track{ height:10px; background:var(--paper); border-radius:999px; overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:999px; background:linear-gradient(90deg, var(--blue) 0%, var(--stamp) 100%); }
+
+  .period-card{
+    border:2px solid var(--line); border-radius:16px; padding:12px 14px; margin-bottom:10px;
+    display:flex; justify-content:space-between; align-items:center;
+    background:var(--paper-2);
+  }
+  .period-card .left .range{ font-size:13px; font-weight:700; display:flex; align-items:center; }
+  .period-card .left .meta{ font-size:11px; color:var(--ink-soft); font-weight:600; margin-top:2px;}
+  .period-card .right{ text-align:right; }
+  .period-card .right .saved{ font-family:'Baloo 2', sans-serif; font-weight:700; font-size:14px; }
+  .seal-done{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:50%;
+    background:var(--jade); color:#fff;
+    font-size:12px; font-weight:700;
+    margin-right:6px; flex-shrink:0;
+  }
+
+  .days-left{ font-size:11px; color:var(--ink-soft); margin-top:10px; text-align:right; font-weight:700; }
+
+  .auth-wrap{ padding:56px 22px; text-align:center; }
+  .auth-wrap .hanko-big{
+    width:88px; height:88px; margin:0 auto 20px;
+    background:linear-gradient(180deg, #FFAFC4 0%, var(--stamp) 100%);
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:44px;
+    box-shadow:0 8px 20px rgba(255,143,174,0.45);
+  }
+  .auth-wrap h1{ font-family:'Baloo 2', sans-serif; font-size:24px; margin-bottom:4px; color:#7A6E8C; }
+  .auth-wrap p.tag{ color:var(--ink-soft); font-size:12px; margin-bottom:28px; font-weight:700; }
+  .auth-form{ text-align:left; }
+  .auth-toggle{ margin-top:16px; font-size:12px; color:var(--ink-soft); font-weight:600; }
+  .auth-error{ color:#E8607F; font-size:12px; margin-top:10px; min-height:14px; font-weight:700; }
+
+  .toprow{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .username-badge{ font-size:12px; color:var(--ink-soft); font-weight:700; }
+  .username-badge button{ background:none;border:none;color:var(--stamp-dark);font-size:12px;font-weight:700;text-decoration:none;cursor:pointer; }
+
+  .modal-back{ position:fixed; inset:0; background:rgba(74,68,88,0.45); display:flex; align-items:flex-end; justify-content:center; z-index:50; }
+  .modal{ background:var(--paper); width:100%; max-width:480px; padding:22px 20px 30px; border-radius:24px 24px 0 0; max-height:90vh; overflow-y:auto; }
+  .modal h3{ font-family:'Baloo 2', sans-serif; margin:0 0 16px; font-size:18px; color:#7A6E8C; }
+  .freq-options{ display:flex; gap:8px; margin-bottom:16px; }
+  .freq-opt{ flex:1; text-align:center; padding:10px 6px; border:2px solid var(--line); font-size:12px; font-weight:700; cursor:pointer; border-radius:999px; }
+  .freq-opt.selected{ background:var(--stamp); color:#fff; border-color:var(--stamp-dark); }
+
+  .footer-note{ text-align:center; font-size:11px; color:var(--ink-soft); margin-top:30px; padding-bottom:10px; font-weight:600; }
+  .install-hint{ font-size:11px; color:var(--ink-soft); text-align:center; margin-top:14px; line-height:1.6; font-weight:600; }
+  .loading-note{ text-align:center; padding:60px 20px; color:var(--ink-soft); font-size:13px; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="book" id="book">
+
+  <div id="screen-loading" class="screen loading-note" data-i18n="loadingText">Opening the ledger…</div>
+
+  <!-- AUTH SCREEN -->
+  <div id="screen-auth" class="screen auth-wrap hidden">
+    <div class="hanko-big">🐷</div>
+    <h1 data-i18n="appName">Household Ledger</h1>
+    <p class="tag" data-i18n="appTagline">your weekly, fortnightly or monthly account book</p>
+
+    <div class="auth-form" id="signin-form">
+      <div class="field"><label data-i18n="emailLabel">Email</label><input type="email" id="signin-email"></div>
+      <div class="field"><label data-i18n="passwordLabel">Password</label><input type="password" id="signin-password"></div>
+      <button class="btn btn-stamp" id="btn-signin" data-i18n="btnSignin">Open my piggy bank 🐷</button>
+      <div class="auth-error" id="signin-error"></div>
+      <div class="auth-toggle"><span data-i18n="newHereText">New here? </span><a href="#" id="show-signup" class="btn-link" style="display:inline;" data-i18n="createAccountLink">Create an account</a></div>
+    </div>
+
+    <div class="auth-form hidden" id="signup-form">
+      <div class="field"><label data-i18n="nameLabel">Your name</label><input type="text" id="signup-name"></div>
+      <div class="field"><label data-i18n="currencyLabel">Currency</label>
+        <select id="signup-currency"></select>
+      </div>
+      <div class="field"><label data-i18n="emailLabel">Email</label><input type="email" id="signup-email"></div>
+      <div class="field"><label data-i18n="passwordHintLabel">Password (6+ characters)</label><input type="password" id="signup-password"></div>
+      <button class="btn btn-stamp" id="btn-signup" data-i18n="btnSignup">Start saving! 🐷</button>
+      <div class="auth-error" id="signup-error"></div>
+      <div class="auth-toggle"><span data-i18n="alreadyHaveText">Already have a ledger? </span><a href="#" id="show-signin" class="btn-link" style="display:inline;" data-i18n="signInLink">Sign in</a></div>
+    </div>
+
+    <div class="install-hint" data-i18n-html="installHint">On iPhone: Share → Add to Home Screen.<br>On Android Chrome: tap "Install app" when prompted.</div>
+  </div>
+
+  <!-- INCOME SETUP SCREEN -->
+  <div id="screen-income-setup" class="screen hidden">
+    <h2 class="section-title" data-i18n="setIncomeTitle">Set your income</h2>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:-6px;margin-bottom:20px;" data-i18n="setIncomeDesc">This decides how your ledger closes out each period — weekly, fortnightly, or monthly.</p>
+    <div class="field">
+      <label data-i18n="incomeAmountLabel">Income amount</label>
+      <input type="number" id="setup-amount" placeholder="0.00" step="0.01" min="0">
+    </div>
+    <div class="field">
+      <label data-i18n="freqQuestionLabel">How often is this income?</label>
+      <div class="freq-options" id="setup-freq">
+        <div class="freq-opt" data-freq="weekly" data-i18n="freqWeekly">Weekly</div>
+        <div class="freq-opt" data-freq="fortnightly" data-i18n="freqFortnightly">Fortnightly</div>
+        <div class="freq-opt" data-freq="monthly" data-i18n="freqMonthly">Monthly</div>
+      </div>
+    </div>
+    <div class="field" id="setup-anchor-field">
+      <label><span data-i18n="anchorLabel">What date does your income period start?</span> <span style="font-weight:400;" data-i18n="anchorLabelHint">(e.g. payday)</span></label>
+      <input type="date" id="setup-anchor">
+      <div class="days-left" id="setup-anchor-note" style="text-align:left;margin-top:6px;"></div>
+    </div>
+    <button class="btn btn-stamp" id="btn-save-income" data-i18n="btnStartSaving">Start saving! 🐷</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="screen-dashboard" class="screen hidden">
+    <div class="toprow">
+      <span class="username-badge" id="username-badge"></span>
+      <span class="username-badge"><button id="btn-logout" data-i18n="signOutBtn">sign out</button></span>
+    </div>
+
+    <div class="income-card">
+      <div class="income-row">
+        <div>
+          <div class="income-amt" id="income-amount-display">$0</div>
+          <div class="income-freq" id="income-freq-display">weekly</div>
+        </div>
+        <button class="btn-link" id="btn-edit-income" data-i18n="editLinkLower">edit</button>
+      </div>
+    </div>
+
+    <h2 class="section-title" data-i18n="addSpendTitle">Add a spend</h2>
+    <div class="field">
+      <label data-i18n="amountLabel">Amount</label>
+      <input type="number" id="spend-amount" placeholder="0.00" step="0.01" min="0">
+    </div>
+    <div class="field">
+      <label data-i18n="categoryLabel">Category</label>
+      <div class="chips" id="category-chips"></div>
+    </div>
+    <div class="field">
+      <label data-i18n="dateLabel">Date</label>
+      <input type="date" id="spend-date">
+    </div>
+    <div class="field">
+      <label data-i18n="noteLabel">Note (optional)</label>
+      <input type="text" id="spend-note" placeholder="e.g. flat white at Toby's" data-i18n-placeholder="notePlaceholder">
+    </div>
+    <button class="btn btn-stamp" id="btn-add-spend" data-i18n="addSpendBtn">Add it in! 🐷</button>
+
+    <h2 class="section-title" style="margin-top:32px;">
+      <span data-i18n="thisPeriodTitle">This period</span> <span class="sub">
+        <span id="current-period-range"></span>
+        <button class="btn-link" id="btn-edit-period-date" style="margin-left:6px;" data-i18n="editLink">Edit</button>
+      </span>
+    </h2>
+    <div id="current-entries"></div>
+
+    <div class="summary-box">
+      <div class="summary-line"><span class="lbl"><span data-i18n="incomeLabelPrefix">Income</span> (<span id="summary-freq"></span>)</span><span id="summary-income">$0.00</span></div>
+      <div class="summary-line"><span class="lbl" data-i18n="spentSoFarLabel">Spent so far</span><span id="summary-spent">$0.00</span></div>
+      <div class="summary-line total"><span class="lbl" style="font-size:14px;" data-i18n="savedSoFarLabel">Saved so far</span><span id="summary-saved">$0.00</span></div>
+    </div>
+    <div id="category-breakdown"></div>
+    <div class="days-left" id="days-left"></div>
+
+    <h2 class="section-title" style="margin-top:34px;" data-i18n="pastPeriodsTitle">Past periods</h2>
+    <div id="history-list"></div>
+
+    <div class="footer-note" data-i18n="footerNote">🐷 kept like a little piggy bank, one coin at a time.</div>
+  </div>
+
+</div>
+
+<div id="modal-container"></div>
+
+<script>
+(function(){
+  const CATEGORIES = [
+    {key:'coffee', labelKey:'catCoffee', emoji:'☕'},
+    {key:'food', labelKey:'catFood', emoji:'🍽️'},
+    {key:'groceries', labelKey:'catGroceries', emoji:'🛒'},
+    {key:'travel', labelKey:'catTravel', emoji:'🚗'},
+    {key:'entertainment', labelKey:'catEntertainment', emoji:'🎬'},
+    {key:'shopping', labelKey:'catShopping', emoji:'🛍️'},
+    {key:'bills', labelKey:'catBills', emoji:'📄'},
+    {key:'health', labelKey:'catHealth', emoji:'💊'},
+    {key:'other', labelKey:'catOther', emoji:'📦'}
+  ];
+
+  const CURRENCIES = [
+    {code:'AUD', symbol:'$', decimals:2, label:'AUD — Australian Dollar'},
+    {code:'USD', symbol:'$', decimals:2, label:'USD — US Dollar'},
+    {code:'KRW', symbol:'₩', decimals:0, label:'KRW — Korean Won'},
+    {code:'JPY', symbol:'¥', decimals:0, label:'JPY — Japanese Yen'},
+    {code:'EUR', symbol:'€', decimals:2, label:'EUR — Euro'},
+    {code:'GBP', symbol:'£', decimals:2, label:'GBP — British Pound'},
+    {code:'NZD', symbol:'$', decimals:2, label:'NZD — NZ Dollar'},
+    {code:'SGD', symbol:'$', decimals:2, label:'SGD — Singapore Dollar'}
+  ];
+
+  // ---------- i18n ----------
+  const CURRENCY_LANG = { KRW:'ko', JPY:'ja' };
+  function langForCurrency(code){ return CURRENCY_LANG[code] || 'en'; }
+  let currentLang = 'en';
+
+  const I18N = {
+    en: {
+      appName:'Household Ledger', appTagline:'your weekly, fortnightly or monthly account book',
+      emailLabel:'Email', passwordLabel:'Password', btnSignin:'Open my piggy bank 🐷',
+      newHereText:'New here? ', createAccountLink:'Create an account',
+      nameLabel:'Your name', currencyLabel:'Currency', passwordHintLabel:'Password (6+ characters)',
+      btnSignup:'Start saving! 🐷', alreadyHaveText:'Already have a ledger? ', signInLink:'Sign in',
+      installHint:'On iPhone: Share → Add to Home Screen.<br>On Android Chrome: tap "Install app" when prompted.',
+      setIncomeTitle:'Set your income', setIncomeDesc:'This decides how your ledger closes out each period — weekly, fortnightly, or monthly.',
+      incomeAmountLabel:'Income amount', freqQuestionLabel:'How often is this income?',
+      freqWeekly:'Weekly', freqFortnightly:'Fortnightly', freqMonthly:'Monthly',
+      anchorLabel:'What date does your income period start?', anchorLabelHint:'(e.g. payday)',
+      btnStartSaving:'Start saving! 🐷', signOutBtn:'sign out', editLinkLower:'edit',
+      addSpendTitle:'Add a spend', amountLabel:'Amount', categoryLabel:'Category', dateLabel:'Date',
+      noteLabel:'Note (optional)', notePlaceholder:"e.g. flat white at Toby's", addSpendBtn:'Add it in! 🐷',
+      thisPeriodTitle:'This period', editLink:'Edit', incomeLabelPrefix:'Income',
+      spentSoFarLabel:'Spent so far', savedSoFarLabel:'Saved so far', pastPeriodsTitle:'Past periods',
+      footerNote:'🐷 kept like a little piggy bank, one coin at a time.',
+      loadingText:'Opening the ledger…', yourFallback:'Your',
+      noSpendsYet:'No spends logged yet this period. Add your first one above.',
+      noClosedPeriods:'No closed periods yet — your history will build up here.',
+      closesToday:'This period closes today.',
+      daysLeftTemplate:n=>`${n} day${n===1?'':'s'} left until this period closes.`,
+      spentWord:'spent', fillEveryField:'Fill in every field.', enterEmailPassword:'Enter email and password.',
+      enterIncomeAboveZero:'Enter an income amount above 0.', enterSpendAboveZero:'Enter a spend amount above 0.',
+      editIncomeModalTitle:'Edit income 💗', howOftenLabel:'How often', saveChangesBtn:'Save changes 💗', cancelBtn:'Cancel',
+      anchorNoteWeekly:'Your week will run 7 days from this date, then repeat.',
+      anchorNoteFortnightly:'Your fortnight will run 14 days from this date, then repeat.',
+      anchorNoteMonthly:'Your month will run from this date to the day before it next month.',
+      removeTitle:'remove',
+      catCoffee:'Coffee', catFood:'Food', catGroceries:'Groceries', catTravel:'Travel',
+      catEntertainment:'Entertainment', catShopping:'Shopping', catBills:'Bills', catHealth:'Health', catOther:'Other',
+      ledgerTitle:(name)=>`${name}'s ledger`
+    },
+    ko: {
+      appName:'우리집 가계부', appTagline:'주간, 격주, 월간 가계부',
+      emailLabel:'이메일', passwordLabel:'비밀번호', btnSignin:'저금통 열기 🐷',
+      newHereText:'처음이신가요? ', createAccountLink:'계정 만들기',
+      nameLabel:'이름', currencyLabel:'통화', passwordHintLabel:'비밀번호 (6자 이상)',
+      btnSignup:'저축 시작하기! 🐷', alreadyHaveText:'이미 계정이 있으신가요? ', signInLink:'로그인',
+      installHint:'아이폰: 공유 → 홈 화면에 추가하기.<br>안드로이드 크롬: \'앱 설치\' 알림이 뜨면 탭하세요.',
+      setIncomeTitle:'수입 설정하기', setIncomeDesc:'이 설정에 따라 매주, 격주, 매월 단위로 가계부가 마감돼요.',
+      incomeAmountLabel:'수입 금액', freqQuestionLabel:'수입은 얼마나 자주 들어오나요?',
+      freqWeekly:'매주', freqFortnightly:'격주', freqMonthly:'매월',
+      anchorLabel:'수입 주기가 시작되는 날짜는 언제인가요?', anchorLabelHint:'(예: 월급날)',
+      btnStartSaving:'저축 시작하기! 🐷', signOutBtn:'로그아웃', editLinkLower:'수정',
+      addSpendTitle:'지출 추가하기', amountLabel:'금액', categoryLabel:'카테고리', dateLabel:'날짜',
+      noteLabel:'메모 (선택)', notePlaceholder:'예: 토비네 카페 라떼', addSpendBtn:'추가하기! 🐷',
+      thisPeriodTitle:'이번 기간', editLink:'수정', incomeLabelPrefix:'수입',
+      spentSoFarLabel:'지금까지 지출', savedSoFarLabel:'지금까지 저축', pastPeriodsTitle:'지난 기간',
+      footerNote:'🐷 작은 저금통처럼, 동전 하나하나 소중하게.',
+      loadingText:'가계부를 여는 중…', yourFallback:'나의',
+      noSpendsYet:'아직 이번 기간에 기록한 지출이 없어요. 위에서 첫 지출을 추가해보세요.',
+      noClosedPeriods:'아직 마감된 기간이 없어요 — 여기에 기록이 쌓일 거예요.',
+      closesToday:'이번 기간이 오늘 마감돼요.',
+      daysLeftTemplate:n=>`마감까지 ${n}일 남았어요.`,
+      spentWord:'지출', fillEveryField:'모든 항목을 입력해주세요.', enterEmailPassword:'이메일과 비밀번호를 입력해주세요.',
+      enterIncomeAboveZero:'0보다 큰 수입 금액을 입력해주세요.', enterSpendAboveZero:'0보다 큰 지출 금액을 입력해주세요.',
+      editIncomeModalTitle:'수입 수정하기 💗', howOftenLabel:'얼마나 자주', saveChangesBtn:'저장하기 💗', cancelBtn:'취소',
+      anchorNoteWeekly:'이 날짜부터 7일마다 한 주가 반복돼요.',
+      anchorNoteFortnightly:'이 날짜부터 14일마다 반복돼요.',
+      anchorNoteMonthly:'이 날짜부터 다음 달 같은 날짜 전날까지 한 달이 반복돼요.',
+      removeTitle:'삭제',
+      catCoffee:'커피', catFood:'음식', catGroceries:'장보기', catTravel:'교통',
+      catEntertainment:'여가', catShopping:'쇼핑', catBills:'공과금', catHealth:'건강', catOther:'기타',
+      ledgerTitle:(name)=>`${name}님의 가계부`
+    },
+    ja: {
+      appName:'おうち家計簿', appTagline:'週ごと・隔週・月ごとの家計簿',
+      emailLabel:'メールアドレス', passwordLabel:'パスワード', btnSignin:'貯金箱を開ける 🐷',
+      newHereText:'はじめてですか？ ', createAccountLink:'アカウントを作成',
+      nameLabel:'お名前', currencyLabel:'通貨', passwordHintLabel:'パスワード（6文字以上）',
+      btnSignup:'貯金をはじめる！🐷', alreadyHaveText:'すでにアカウントをお持ちですか？ ', signInLink:'ログイン',
+      installHint:'iPhone：共有 → ホーム画面に追加。<br>Android Chrome：「アプリをインストール」が表示されたらタップしてください。',
+      setIncomeTitle:'収入を設定する', setIncomeDesc:'この設定によって、週ごと・隔週・月ごとに家計簿が締められます。',
+      incomeAmountLabel:'収入額', freqQuestionLabel:'収入の頻度は？',
+      freqWeekly:'毎週', freqFortnightly:'隔週', freqMonthly:'毎月',
+      anchorLabel:'収入期間はいつから始まりますか？', anchorLabelHint:'（例：給料日）',
+      btnStartSaving:'貯金をはじめる！🐷', signOutBtn:'ログアウト', editLinkLower:'編集',
+      addSpendTitle:'支出を追加', amountLabel:'金額', categoryLabel:'カテゴリー', dateLabel:'日付',
+      noteLabel:'メモ（任意）', notePlaceholder:'例：トビーズのカフェラテ', addSpendBtn:'追加する！🐷',
+      thisPeriodTitle:'今期', editLink:'編集', incomeLabelPrefix:'収入',
+      spentSoFarLabel:'現在の支出', savedSoFarLabel:'現在の貯金', pastPeriodsTitle:'過去の期間',
+      footerNote:'🐷 小さな貯金箱のように、コイン一枚ずつ大切に。',
+      loadingText:'家計簿を開いています…', yourFallback:'あなたの',
+      noSpendsYet:'今期の支出はまだありません。上から最初の支出を追加しましょう。',
+      noClosedPeriods:'締められた期間はまだありません — ここに履歴がたまっていきます。',
+      closesToday:'この期間は今日締め切りです。',
+      daysLeftTemplate:n=>`締め切りまであと${n}日です。`,
+      spentWord:'支出', fillEveryField:'すべての項目を入力してください。', enterEmailPassword:'メールアドレスとパスワードを入力してください。',
+      enterIncomeAboveZero:'0より大きい収入額を入力してください。', enterSpendAboveZero:'0より大きい支出額を入力してください。',
+      editIncomeModalTitle:'収入を編集 💗', howOftenLabel:'頻度', saveChangesBtn:'保存する 💗', cancelBtn:'キャンセル',
+      anchorNoteWeekly:'この日から7日ごとに1週間が繰り返されます。',
+      anchorNoteFortnightly:'この日から14日ごとに繰り返されます。',
+      anchorNoteMonthly:'この日から翌月の前日までを1か月として繰り返します。',
+      removeTitle:'削除',
+      catCoffee:'コーヒー', catFood:'食事', catGroceries:'食料品', catTravel:'交通',
+      catEntertainment:'娯楽', catShopping:'買い物', catBills:'公共料金', catHealth:'健康', catOther:'その他',
+      ledgerTitle:(name)=>`${name}さんの家計簿`
+    }
+  };
+  function t(key){
+    const dict = I18N[currentLang] || I18N.en;
+    return (dict[key] !== undefined ? dict[key] : I18N.en[key]);
+  }
+  function applyLanguage(lang){
+    currentLang = I18N[lang] ? lang : 'en';
+    document.documentElement.lang = currentLang;
+    document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-html]').forEach(el=>{ el.innerHTML = t(el.dataset.i18nHtml); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{ el.placeholder = t(el.dataset.i18nPlaceholder); });
+    document.title = '🐷 ' + t('appName');
+    buildCategoryChips();
+    if(profile && profile.incomeAmount) renderDashboard();
+  }
+
+  // ---------- Firebase init ----------
+  firebase.initializeApp(window.FIREBASE_CONFIG);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  // Keep people signed in even after closing the app or browser — session is
+  // stored on-device and only cleared by an explicit "sign out" tap.
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+
+  let currentUser = null;   // firebase auth user
+  let profile = null;       // {name, currency, incomeAmount, incomeFreq, anchorDate}
+  let expenses = [];        // [{id,date,amount,category,note}]
+  let selectedCategory = 'food';
+  let unsubExpenses = null;
+  let unsubProfile = null;
+
+  // ---------- helpers ----------
+  function currencyInfo(code){
+    return CURRENCIES.find(c=>c.code===code) || CURRENCIES[0];
+  }
+  function fmt(n){
+    const c = currencyInfo(profile ? profile.currency : 'AUD');
+    const val = c.decimals === 0 ? Math.round(n) : Math.round(n*100)/100;
+    return c.symbol + val.toLocaleString(undefined,{minimumFractionDigits:c.decimals, maximumFractionDigits:c.decimals});
+  }
+  const todayStr = () => new Date().toISOString().slice(0,10);
+
+  function daysInMonth(year, month){ return new Date(year, month+1, 0).getDate(); }
+
+  function periodBounds(dateInput, freq, anchorInput){
+    const d = new Date(dateInput); d.setHours(0,0,0,0);
+    const anchor = new Date(anchorInput); anchor.setHours(0,0,0,0);
+    const msPerDay = 86400000;
+    let start, end;
+    if(freq === 'weekly' || freq === 'fortnightly'){
+      const cycleDays = freq === 'weekly' ? 7 : 14;
+      const diffDays = Math.floor((d - anchor)/msPerDay);
+      const idx = Math.floor(diffDays/cycleDays);
+      start = new Date(anchor); start.setDate(anchor.getDate()+idx*cycleDays);
+      end = new Date(start); end.setDate(start.getDate()+cycleDays-1);
+    } else {
+      // monthly: repeats on the same day-of-month as the chosen start date
+      const anchorDay = anchor.getDate();
+      let candidate = new Date(d.getFullYear(), d.getMonth(), Math.min(anchorDay, daysInMonth(d.getFullYear(), d.getMonth())));
+      candidate.setHours(0,0,0,0);
+      if(d < candidate){
+        const pm = new Date(d.getFullYear(), d.getMonth()-1, 1);
+        candidate = new Date(pm.getFullYear(), pm.getMonth(), Math.min(anchorDay, daysInMonth(pm.getFullYear(), pm.getMonth())));
+      }
+      start = candidate;
+      const nm = new Date(start.getFullYear(), start.getMonth()+1, 1);
+      const nextStart = new Date(nm.getFullYear(), nm.getMonth(), Math.min(anchorDay, daysInMonth(nm.getFullYear(), nm.getMonth())));
+      end = new Date(nextStart); end.setDate(nextStart.getDate()-1);
+    }
+    return {start, end};
+  }
+  function periodKey(dateInput){
+    const {start} = periodBounds(dateInput, profile.freq, profile.anchor);
+    return start.toISOString().slice(0,10);
+  }
+  function dateFmt(d){ return d.toLocaleDateString('en-US', {day:'numeric', month:'short'}); }
+  function catInfo(key){
+    const c = CATEGORIES.find(c=>c.key===key);
+    return c ? { emoji:c.emoji, label:t(c.labelKey) } : { emoji:'📦', label:key };
+  }
+  function escapeHtml(str){ const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+
+  function showScreen(id){
+    ['screen-loading','screen-auth','screen-income-setup','screen-dashboard'].forEach(s=>{
+      document.getElementById(s).classList.toggle('hidden', s!==id);
+    });
+  }
+
+  // ---------- currency dropdown ----------
+  function populateCurrencySelect(){
+    const sel = document.getElementById('signup-currency');
+    sel.innerHTML = CURRENCIES.map(c=>`<option value="${c.code}">${c.label}</option>`).join('');
+    sel.onchange = () => applyLanguage(langForCurrency(sel.value));
+  }
+
+  // ---------- auth screen toggling ----------
+  document.getElementById('show-signup').onclick = (e)=>{ e.preventDefault(); document.getElementById('signin-form').classList.add('hidden'); document.getElementById('signup-form').classList.remove('hidden'); };
+  document.getElementById('show-signin').onclick = (e)=>{ e.preventDefault(); document.getElementById('signup-form').classList.add('hidden'); document.getElementById('signin-form').classList.remove('hidden'); };
+
+  document.getElementById('btn-signup').onclick = async () => {
+    const errEl = document.getElementById('signup-error');
+    errEl.textContent = '';
+    const name = document.getElementById('signup-name').value.trim();
+    const currency = document.getElementById('signup-currency').value;
+    const email = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    if(!name || !email || !password){ errEl.textContent = t('fillEveryField'); return; }
+    try{
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      await db.collection('users').doc(cred.user.uid).set({ name, currency });
+    }catch(e){
+      errEl.textContent = e.message;
+    }
+  };
+
+  document.getElementById('btn-signin').onclick = async () => {
+    const errEl = document.getElementById('signin-error');
+    errEl.textContent = '';
+    const email = document.getElementById('signin-email').value.trim();
+    const password = document.getElementById('signin-password').value;
+    if(!email || !password){ errEl.textContent = t('enterEmailPassword'); return; }
+    try{
+      await auth.signInWithEmailAndPassword(email, password);
+    }catch(e){
+      errEl.textContent = e.message;
+    }
+  };
+
+  document.getElementById('btn-logout').onclick = async () => {
+    await auth.signOut();
+  };
+
+  // ---------- auth state ----------
+  auth.onAuthStateChanged(async (user) => {
+    if(unsubProfile){ unsubProfile(); unsubProfile = null; }
+    if(unsubExpenses){ unsubExpenses(); unsubExpenses = null; }
+
+    if(!user){
+      currentUser = null; profile = null; expenses = [];
+      applyLanguage('en');
+      showScreen('screen-auth');
+      return;
+    }
+    currentUser = user;
+    showScreen('screen-loading');
+
+    unsubProfile = db.collection('users').doc(user.uid).onSnapshot((doc) => {
+      if(!doc.exists){ return; }
+      profile = doc.data();
+      applyLanguage(langForCurrency(profile.currency));
+      if(!profile.incomeAmount){
+        showScreen('screen-income-setup');
+        initIncomeSetupScreen();
+      } else {
+        showScreen('screen-dashboard');
+        renderDashboard();
+      }
+    });
+
+    unsubExpenses = db.collection('users').doc(user.uid).collection('expenses')
+      .onSnapshot((snap) => {
+        expenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if(profile && profile.incomeAmount) renderDashboard();
+      });
+  });
+
+  // ---------- income setup ----------
+  let setupFreq = 'weekly';
+  function anchorNoteText(freq){
+    if(freq === 'weekly') return t('anchorNoteWeekly');
+    if(freq === 'fortnightly') return t('anchorNoteFortnightly');
+    return t('anchorNoteMonthly');
+  }
+  function initIncomeSetupScreen(){
+    document.getElementById('setup-amount').value = '';
+    setupFreq = 'weekly';
+    document.getElementById('setup-anchor').value = todayStr();
+    document.getElementById('setup-anchor-note').textContent = anchorNoteText(setupFreq);
+    refreshFreqButtons('setup-freq', setupFreq, (f)=>{ setupFreq = f; document.getElementById('setup-anchor-note').textContent = anchorNoteText(f); });
+  }
+  function refreshFreqButtons(containerId, current, onPick){
+    const wrap = document.getElementById(containerId);
+    wrap.querySelectorAll('.freq-opt').forEach(el=>{
+      el.classList.toggle('selected', el.dataset.freq === current);
+      el.onclick = () => { onPick(el.dataset.freq); refreshFreqButtons(containerId, el.dataset.freq, onPick); };
+    });
+  }
+
+  document.getElementById('btn-save-income').onclick = async () => {
+    const amt = parseFloat(document.getElementById('setup-amount').value);
+    if(isNaN(amt) || amt <= 0){ alert(t('enterIncomeAboveZero')); return; }
+    const anchor = document.getElementById('setup-anchor').value || todayStr();
+    await db.collection('users').doc(currentUser.uid).set({
+      incomeAmount: amt, freq: setupFreq, anchor
+    }, {merge:true});
+  };
+
+  // ---------- edit income modal ----------
+  function openEditIncomeModal(){
+    const container = document.getElementById('modal-container');
+    container.innerHTML = `
+      <div class="modal-back" id="modal-back">
+        <div class="modal">
+          <h3 data-i18n="editIncomeModalTitle">${t('editIncomeModalTitle')}</h3>
+          <div class="field">
+            <label data-i18n="incomeAmountLabel">${t('incomeAmountLabel')}</label>
+            <input type="number" id="edit-amount" step="0.01" min="0" value="${profile.incomeAmount}">
+          </div>
+          <div class="field">
+            <label data-i18n="howOftenLabel">${t('howOftenLabel')}</label>
+            <div class="freq-options" id="edit-freq"></div>
+          </div>
+          <div class="field" id="edit-anchor-field">
+            <label><span data-i18n="anchorLabel">${t('anchorLabel')}</span> <span style="font-weight:400;" data-i18n="anchorLabelHint">${t('anchorLabelHint')}</span></label>
+            <input type="date" id="edit-anchor" value="${profile.anchor}">
+            <div class="days-left" id="edit-anchor-note" style="text-align:left;margin-top:6px;"></div>
+          </div>
+          <div class="field">
+            <label data-i18n="currencyLabel">${t('currencyLabel')}</label>
+            <select id="edit-currency"></select>
+          </div>
+          <button class="btn btn-stamp" id="btn-confirm-edit" data-i18n="saveChangesBtn">${t('saveChangesBtn')}</button>
+          <button class="btn btn-ghost" style="width:100%;margin-top:10px;" id="btn-cancel-edit" data-i18n="cancelBtn">${t('cancelBtn')}</button>
+        </div>
+      </div>
+    `;
+    const curSel = document.getElementById('edit-currency');
+    curSel.innerHTML = CURRENCIES.map(c=>`<option value="${c.code}" ${c.code===profile.currency?'selected':''}>${c.label}</option>`).join('');
+    curSel.onchange = () => {
+      applyLanguage(langForCurrency(curSel.value));
+      document.getElementById('edit-anchor-note').textContent = anchorNoteText(editFreq);
+    };
+
+    let editFreq = profile.freq;
+    const freqWrap = document.getElementById('edit-freq');
+    const freqLabelKey = {weekly:'freqWeekly', fortnightly:'freqFortnightly', monthly:'freqMonthly'};
+    freqWrap.innerHTML = ['weekly','fortnightly','monthly'].map(f=>`<div class="freq-opt${f===editFreq?' selected':''}" data-freq="${f}" data-i18n="${freqLabelKey[f]}">${t(freqLabelKey[f])}</div>`).join('');
+    freqWrap.querySelectorAll('.freq-opt').forEach(el=>{
+      el.onclick = () => {
+        editFreq = el.dataset.freq;
+        freqWrap.querySelectorAll('.freq-opt').forEach(x=>x.classList.toggle('selected', x===el));
+        document.getElementById('edit-anchor-note').textContent = anchorNoteText(editFreq);
+      };
+    });
+    document.getElementById('edit-anchor-note').textContent = anchorNoteText(editFreq);
+
+    document.getElementById('btn-cancel-edit').onclick = () => { container.innerHTML=''; };
+    document.getElementById('modal-back').onclick = (e) => { if(e.target.id==='modal-back') container.innerHTML=''; };
+    document.getElementById('btn-confirm-edit').onclick = async () => {
+      const amt = parseFloat(document.getElementById('edit-amount').value);
+      if(isNaN(amt) || amt <= 0){ alert(t('enterIncomeAboveZero')); return; }
+      const anchor = document.getElementById('edit-anchor').value || todayStr();
+      await db.collection('users').doc(currentUser.uid).set({
+        incomeAmount: amt, freq: editFreq, anchor, currency: curSel.value
+      }, {merge:true});
+      container.innerHTML = '';
+    };
+  }
+  document.getElementById('btn-edit-income').onclick = openEditIncomeModal;
+  document.getElementById('btn-edit-period-date').onclick = openEditIncomeModal;
+
+  // ---------- category chips ----------
+  function buildCategoryChips(){
+    const wrap = document.getElementById('category-chips');
+    wrap.innerHTML = '';
+    CATEGORIES.forEach(c=>{
+      const el = document.createElement('div');
+      el.className = 'chip' + (c.key===selectedCategory ? ' selected' : '');
+      el.innerHTML = c.emoji + ' ' + t(c.labelKey);
+      el.onclick = () => { selectedCategory = c.key; buildCategoryChips(); };
+      wrap.appendChild(el);
+    });
+  }
+
+  // ---------- add spend ----------
+  document.getElementById('btn-add-spend').onclick = async () => {
+    const amt = parseFloat(document.getElementById('spend-amount').value);
+    if(isNaN(amt) || amt <= 0){ alert(t('enterSpendAboveZero')); return; }
+    const date = document.getElementById('spend-date').value || todayStr();
+    const note = document.getElementById('spend-note').value.trim();
+    await db.collection('users').doc(currentUser.uid).collection('expenses').add({
+      date, amount: amt, category: selectedCategory, note, createdAt: Date.now()
+    });
+    document.getElementById('spend-amount').value = '';
+    document.getElementById('spend-note').value = '';
+    const btn = document.getElementById('btn-add-spend');
+    btn.classList.add('stamping');
+    setTimeout(()=>btn.classList.remove('stamping'), 350);
+  };
+
+  // ---------- dashboard render ----------
+  const FREQ_LABEL_KEY = {weekly:'freqWeekly', fortnightly:'freqFortnightly', monthly:'freqMonthly'};
+  function renderDashboard(){
+    document.getElementById('username-badge').textContent = t('ledgerTitle')(profile.name || t('yourFallback'));
+    document.getElementById('income-amount-display').textContent = fmt(profile.incomeAmount);
+    document.getElementById('income-freq-display').textContent = t(FREQ_LABEL_KEY[profile.freq]);
+    document.getElementById('summary-freq').textContent = t(FREQ_LABEL_KEY[profile.freq]);
+    document.getElementById('spend-date').value = todayStr();
+
+    const {start, end} = periodBounds(todayStr(), profile.freq, profile.anchor);
+    document.getElementById('current-period-range').textContent = dateFmt(start)+' – '+dateFmt(end);
+
+    const curKey = periodKey(todayStr());
+    const curExpenses = expenses.filter(e => periodKey(e.date) === curKey).sort((a,b)=> b.date.localeCompare(a.date));
+
+    const entriesWrap = document.getElementById('current-entries');
+    entriesWrap.innerHTML = '';
+    if(curExpenses.length === 0){
+      entriesWrap.innerHTML = `<div class="empty-note">${t('noSpendsYet')}</div>`;
+    } else {
+      curExpenses.forEach(e=>{
+        const c = catInfo(e.category);
+        const row = document.createElement('div');
+        row.className = 'ledger-row';
+        row.innerHTML = `
+          <span class="cat-emoji">${c.emoji}</span>
+          <span class="desc">
+            <div class="cat">${c.label}${e.note ? ' — <span class="note">'+escapeHtml(e.note)+'</span>' : ''}</div>
+            <div class="date-tag">${e.date}</div>
+          </span>
+          <span class="amt">${fmt(e.amount)}</span>
+          <button class="del" data-id="${e.id}" title="${t('removeTitle')}">✕</button>
+        `;
+        entriesWrap.appendChild(row);
+      });
+      entriesWrap.querySelectorAll('.del').forEach(btn=>{
+        btn.onclick = async () => {
+          await db.collection('users').doc(currentUser.uid).collection('expenses').doc(btn.dataset.id).delete();
+        };
+      });
+    }
+
+    const totalSpent = curExpenses.reduce((s,e)=>s+e.amount,0);
+    const saved = profile.incomeAmount - totalSpent;
+    document.getElementById('summary-income').textContent = fmt(profile.incomeAmount);
+    document.getElementById('summary-spent').textContent = fmt(totalSpent);
+    const savedEl = document.getElementById('summary-saved');
+    savedEl.textContent = (saved>=0?'':'-') + fmt(Math.abs(saved));
+    savedEl.className = saved>=0 ? 'saved-positive' : 'saved-negative';
+
+    const breakdown = {};
+    curExpenses.forEach(e=>{ breakdown[e.category] = (breakdown[e.category]||0)+e.amount; });
+    const maxVal = Math.max(1, ...Object.values(breakdown));
+    const bWrap = document.getElementById('category-breakdown');
+    bWrap.innerHTML = '';
+    Object.entries(breakdown).sort((a,b)=>b[1]-a[1]).forEach(([key,val])=>{
+      const c = catInfo(key);
+      const row = document.createElement('div');
+      row.className = 'bar-row';
+      row.innerHTML = `
+        <div class="bar-label"><span>${c.emoji} ${c.label}</span><span>${fmt(val)}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(val/maxVal*100).toFixed(0)}%"></div></div>
+      `;
+      bWrap.appendChild(row);
+    });
+
+    const endDate = new Date(end); endDate.setHours(23,59,59,999);
+    const now = new Date();
+    const daysLeft = Math.max(0, Math.ceil((endDate-now)/86400000));
+    document.getElementById('days-left').textContent = daysLeft===0 ? t('closesToday') : t('daysLeftTemplate')(daysLeft);
+
+    const historyWrap = document.getElementById('history-list');
+    historyWrap.innerHTML = '';
+    const groups = {};
+    expenses.forEach(e=>{
+      const k = periodKey(e.date);
+      if(k === curKey) return;
+      if(!groups[k]) groups[k] = [];
+      groups[k].push(e);
+    });
+    const sortedKeys = Object.keys(groups).sort().reverse();
+    if(sortedKeys.length === 0){
+      historyWrap.innerHTML = `<div class="empty-note">${t('noClosedPeriods')}</div>`;
+    } else {
+      sortedKeys.forEach(k=>{
+        const list = groups[k];
+        const {start:ps, end:pe} = periodBounds(k, profile.freq, profile.anchor);
+        const spent = list.reduce((s,e)=>s+e.amount,0);
+        const sv = profile.incomeAmount - spent;
+        const card = document.createElement('div');
+        card.className = 'period-card';
+        card.innerHTML = `
+          <div class="left">
+            <div class="range"><span class="seal-done">✓</span>${dateFmt(ps)} – ${dateFmt(pe)}</div>
+            <div class="meta">${t('spentWord')} ${fmt(spent)}</div>
+          </div>
+          <div class="right">
+            <div class="saved ${sv>=0?'saved-positive':'saved-negative'}">${sv>=0?'':'-'}${fmt(Math.abs(sv))}</div>
+          </div>
+        `;
+        historyWrap.appendChild(card);
+      });
+    }
+
+    buildCategoryChips();
+  }
+
+  // ---------- init ----------
+  populateCurrencySelect();
+  applyLanguage('en');
+  document.getElementById('spend-date').value = todayStr();
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+    });
+  }
+})();
+</script>
+</body>
+</html>
