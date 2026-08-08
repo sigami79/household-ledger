@@ -294,8 +294,9 @@
       </div>
     </div>
     <div class="field" id="setup-anchor-field">
-      <label>First day of your current period</label>
+      <label>What date does your income period start? <span style="font-weight:400;">(e.g. payday)</span></label>
       <input type="date" id="setup-anchor">
+      <div class="days-left" id="setup-anchor-note" style="text-align:left;margin-top:6px;"></div>
     </div>
     <button class="btn btn-stamp" id="btn-save-income">Start saving! 🐷</button>
   </div>
@@ -410,31 +411,32 @@
   }
   const todayStr = () => new Date().toISOString().slice(0,10);
 
-  function getMonday(d){
-    const date = new Date(d); date.setHours(0,0,0,0);
-    const day = date.getDay();
-    const diff = (day === 0 ? -6 : 1 - day);
-    date.setDate(date.getDate()+diff);
-    return date;
-  }
+  function daysInMonth(year, month){ return new Date(year, month+1, 0).getDate(); }
+
   function periodBounds(dateInput, freq, anchorInput){
     const d = new Date(dateInput); d.setHours(0,0,0,0);
-    const anchor = anchorInput ? new Date(anchorInput) : getMonday(d);
-    anchor.setHours(0,0,0,0);
+    const anchor = new Date(anchorInput); anchor.setHours(0,0,0,0);
+    const msPerDay = 86400000;
     let start, end;
-    if(freq === 'weekly'){
-      start = getMonday(d);
-      end = new Date(start); end.setDate(start.getDate()+6);
-    } else if(freq === 'fortnightly'){
-      const anchorMonday = getMonday(anchor);
-      const msPerDay = 86400000;
-      const diffDays = Math.floor((d - anchorMonday)/msPerDay);
-      const idx = Math.floor(diffDays/14);
-      start = new Date(anchorMonday); start.setDate(anchorMonday.getDate()+idx*14);
-      end = new Date(start); end.setDate(start.getDate()+13);
+    if(freq === 'weekly' || freq === 'fortnightly'){
+      const cycleDays = freq === 'weekly' ? 7 : 14;
+      const diffDays = Math.floor((d - anchor)/msPerDay);
+      const idx = Math.floor(diffDays/cycleDays);
+      start = new Date(anchor); start.setDate(anchor.getDate()+idx*cycleDays);
+      end = new Date(start); end.setDate(start.getDate()+cycleDays-1);
     } else {
-      start = new Date(d.getFullYear(), d.getMonth(), 1);
-      end = new Date(d.getFullYear(), d.getMonth()+1, 0);
+      // monthly: repeats on the same day-of-month as the chosen start date
+      const anchorDay = anchor.getDate();
+      let candidate = new Date(d.getFullYear(), d.getMonth(), Math.min(anchorDay, daysInMonth(d.getFullYear(), d.getMonth())));
+      candidate.setHours(0,0,0,0);
+      if(d < candidate){
+        const pm = new Date(d.getFullYear(), d.getMonth()-1, 1);
+        candidate = new Date(pm.getFullYear(), pm.getMonth(), Math.min(anchorDay, daysInMonth(pm.getFullYear(), pm.getMonth())));
+      }
+      start = candidate;
+      const nm = new Date(start.getFullYear(), start.getMonth()+1, 1);
+      const nextStart = new Date(nm.getFullYear(), nm.getMonth(), Math.min(anchorDay, daysInMonth(nm.getFullYear(), nm.getMonth())));
+      end = new Date(nextStart); end.setDate(nextStart.getDate()-1);
     }
     return {start, end};
   }
@@ -529,15 +531,17 @@
 
   // ---------- income setup ----------
   let setupFreq = 'weekly';
+  function anchorNoteText(freq){
+    if(freq === 'weekly') return 'Your week will run 7 days from this date, then repeat.';
+    if(freq === 'fortnightly') return 'Your fortnight will run 14 days from this date, then repeat.';
+    return 'Your month will run from this date to the day before it next month.';
+  }
   function initIncomeSetupScreen(){
     document.getElementById('setup-amount').value = '';
     setupFreq = 'weekly';
     document.getElementById('setup-anchor').value = todayStr();
-    refreshFreqButtons('setup-freq', setupFreq, (f)=>{ setupFreq = f; toggleAnchorField(); });
-    toggleAnchorField();
-  }
-  function toggleAnchorField(){
-    document.getElementById('setup-anchor-field').classList.toggle('hidden', setupFreq === 'weekly');
+    document.getElementById('setup-anchor-note').textContent = anchorNoteText(setupFreq);
+    refreshFreqButtons('setup-freq', setupFreq, (f)=>{ setupFreq = f; document.getElementById('setup-anchor-note').textContent = anchorNoteText(f); });
   }
   function refreshFreqButtons(containerId, current, onPick){
     const wrap = document.getElementById(containerId);
@@ -550,7 +554,7 @@
   document.getElementById('btn-save-income').onclick = async () => {
     const amt = parseFloat(document.getElementById('setup-amount').value);
     if(isNaN(amt) || amt <= 0){ alert('Enter an income amount above 0.'); return; }
-    const anchor = setupFreq === 'weekly' ? todayStr() : (document.getElementById('setup-anchor').value || todayStr());
+    const anchor = document.getElementById('setup-anchor').value || todayStr();
     await db.collection('users').doc(currentUser.uid).set({
       incomeAmount: amt, freq: setupFreq, anchor
     }, {merge:true});
@@ -572,8 +576,9 @@
             <div class="freq-options" id="edit-freq"></div>
           </div>
           <div class="field" id="edit-anchor-field">
-            <label>First day of current period</label>
+            <label>What date does your period start? <span style="font-weight:400;">(e.g. payday)</span></label>
             <input type="date" id="edit-anchor" value="${profile.anchor}">
+            <div class="days-left" id="edit-anchor-note" style="text-align:left;margin-top:6px;"></div>
           </div>
           <div class="field">
             <label>Currency</label>
@@ -594,23 +599,24 @@
       el.onclick = () => {
         editFreq = el.dataset.freq;
         freqWrap.querySelectorAll('.freq-opt').forEach(x=>x.classList.toggle('selected', x===el));
-        document.getElementById('edit-anchor-field').classList.toggle('hidden', editFreq==='weekly');
+        document.getElementById('edit-anchor-note').textContent = anchorNoteText(editFreq);
       };
     });
-    document.getElementById('edit-anchor-field').classList.toggle('hidden', editFreq==='weekly');
+    document.getElementById('edit-anchor-note').textContent = anchorNoteText(editFreq);
 
     document.getElementById('btn-cancel-edit').onclick = () => { container.innerHTML=''; };
     document.getElementById('modal-back').onclick = (e) => { if(e.target.id==='modal-back') container.innerHTML=''; };
     document.getElementById('btn-confirm-edit').onclick = async () => {
       const amt = parseFloat(document.getElementById('edit-amount').value);
       if(isNaN(amt) || amt <= 0){ alert('Enter an income amount above 0.'); return; }
-      const anchor = editFreq === 'weekly' ? todayStr() : (document.getElementById('edit-anchor').value || todayStr());
+      const anchor = document.getElementById('edit-anchor').value || todayStr();
       await db.collection('users').doc(currentUser.uid).set({
         incomeAmount: amt, freq: editFreq, anchor, currency: curSel.value
       }, {merge:true});
       container.innerHTML = '';
     };
   };
+
 
   // ---------- category chips ----------
   function buildCategoryChips(){
